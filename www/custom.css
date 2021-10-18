@@ -1,0 +1,33 @@
+/* Get a fancy font from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Raleway&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat&family=Raleway&display=swap');
+
+/*body {*/
+  /*background-color: black;*/
+  /*color: white; text color */
+/*}*/
+
+/* Change header text to imported font */
+h1 {
+  font-family: 'Raleway', sans-serif;
+  padding-bottom: 50px;
+}
+
+h2 {
+  font-family: 'Raleway', sans-serif;
+}
+
+body {
+  font-family: 'Montserrat', sans-serif;
+}
+
+
+p {
+  font-family: 'Montserrat', sans-serif;
+  padding-top: 50px;
+}
+
+/* Make text visible on inputs */
+.shiny-input-container {
+  color: #474747;
+}
