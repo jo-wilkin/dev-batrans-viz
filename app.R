@@ -16,7 +16,7 @@ library(plotly)
 #transport_data <- read.csv('monthly-transportation.csv', na.strings = "NULL") %>% clean_names()
 transport_data <- read.csv('monthly-transportation-tidy.csv', na.strings = "NULL", stringsAsFactors = FALSE) %>% clean_names()
 
-transport_types <- select(transport_data, 2:5) %>% colnames()
+transport_types <- select(transport_data, 2:5) %>% colnames() %>% setNames(c("Bay Bridge", "Other Bridges", "BART", "Golden Gate"))
 
 transport_data$date <- lubridate::my(transport_data$date)
 
@@ -41,16 +41,14 @@ ui <- fluidPage(
   ),
   theme = transport_theme,
   titlePanel(h1("Monthly Transportation Statistics in the Bay Area")),
-  fluidRow(
-        column(4, p("In March 2020, in response to the COVID-19 pandemic, the State of California ordered as residents to Shelter-In-Place.
-        The aim of the order was to reduce the spread of the novel coronavirus encouraging all residents who could, to work at home."), 
-                  p("This visualisation helps to show the impact of this order on travel in the San Francisco Bay Area by looking at key transportation routes and their user statistics."),
-                  p("You can visualise monthly one-way toll crossing statistics for the Golden Gate Bridge, the Bay Bridge, other Bridges in the SF Bay Area (Antioch, Benicia-Martinez, Carquinez, Dumbarton, Richmond-San Rafael and San Mateo-Hayward bridges)
-        and BART ridership statistics (average weekday BART station exits)."),
-                  p("Data is available from January 2019 until September 2021 (NB. The Golden Gate Bridge only has data until August 2021).")), 
-                      ),
   sidebarLayout(
     sidebarPanel(
+      p("In March 2020, in response to the COVID-19 pandemic, the State of California ordered as residents to Shelter-In-Place.
+        The aim of the order was to reduce the spread of the novel coronavirus encouraging all residents who could, to work at home."), 
+      p("This visualisation helps to show the impact of this order on travel in the San Francisco Bay Area by looking at key transportation routes and their user statistics."),
+      p("You can visualise monthly one-way toll crossing statistics for the Golden Gate Bridge, the Bay Bridge, other Bridges in the SF Bay Area (Antioch, Benicia-Martinez, Carquinez, Dumbarton, Richmond-San Rafael and San Mateo-Hayward bridges)
+        and BART ridership statistics (average weekday BART station exits)."),
+      p("Data is available from January 2019 until September 2021 (NB. The Golden Gate Bridge only has data until August 2021)."), 
       helpText("Choose a transit mode to plot their monthly statistics:"),
       
       selectInput("var", 
