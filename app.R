@@ -1,11 +1,33 @@
 library(shiny)
 library(vroom)
 library(tidyverse)
+library(sf)
 library(janitor)
 library(bslib)
 library(showtext)
 library(thematic)
 library(plotly)
+library(leaflet)
+
+# Spatial data - Should be extracted and put into a separate app!
+# Cleaned and processed so all four can be joined together
+
+# Downloaded from: https://geodata.lib.berkeley.edu/catalog/stanford-mh686mh0418
+BART <- st_read("data/BART/mh686mh0418.shp") %>% select(c(1,4)) %>% mutate(name="bart") %>% as.data.frame()
+
+# Downloaded from: https://geodata.lib.berkeley.edu/catalog/ark28722-s7ng6f
+Bridges <- st_read("data/Bridges/s7ng6f.shp")
+
+Bay_Bridge <- Bridges %>% filter(BRIDGE_NAM == "San Francisco Bay Bridge - West")  %>% select(c(3, 4)) %>% rename(route = BRIDGE_NAM) %>% mutate(name="bay_bridge")%>% as.data.frame()
+  
+Golden_Gate <- Bridges %>% filter(BRIDGE_NAM == "Golden Gate Bridge")  %>% select(c(3, 4)) %>% rename(route = BRIDGE_NAM) %>% mutate(name="golden_gate")%>% as.data.frame()
+
+# Created through downloading ALL BRIDGES in SF Bay Area via OSM
+# Extracting a single way for each of the named bridges (using name to filter!)
+Other_Bridges <- st_read("data/Bridges/other_bridges_2.shp") %>% rename(route = name) %>% mutate(name="other_bridges") %>% as.data.frame()
+
+# Join all together to use in app
+transport_spd <- rbind(BART, Bay_Bridge, Golden_Gate, Other_Bridges) %>% st_as_sf()
 
 # MTC data is provided in XLS format from MTC website (https://mtc.ca.gov/tools-resources/data-tools/monthly-transportation-statistics)
 # Golden Gate data is on the web only (https://www.goldengate.org/bridge/history-research/statistics-data/monthly-traffic-crossings/)
@@ -37,55 +59,67 @@ transport_theme <- bs_theme(
 
 # UI Interface
 ui <- fluidPage(
+  
   # Add reference to stylesheet in www folder
   tags$head(
     tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
   ),
+  
   # Add transport theme from above for base font
   theme = transport_theme,
+  
   # Rename title panel - need to figure out removing H1 from the tab in browser
-  titlePanel(h1("Monthly Transportation Statistics in the Bay Area")),
+  titlePanel("Monthly Transportation Statistics in the Bay Area"),
+  
+  # Insert white space between title and body
+  fluidRow(column(12, p())),
+  
   # Initiate sidebar layout - note, needs siderbar and Main panel
   sidebarLayout(
     # Start with sidebar panel
     sidebarPanel(
-      p("In March 2020, in response to the COVID-19 pandemic, the State of California ordered as residents to Shelter-In-Place.
-        The aim of the order was to reduce the spread of the novel coronavirus encouraging all residents who could, to work at home."), 
-      p("This visualisation helps to show the impact of this order on travel in the San Francisco Bay Area by looking at key transportation routes and their user statistics."),
-      p("You can visualise monthly one-way toll crossing statistics for the Golden Gate Bridge, the Bay Bridge, other Bridges in the SF Bay Area (Antioch, Benicia-Martinez, Carquinez, Dumbarton, Richmond-San Rafael and San Mateo-Hayward bridges)
-        and BART ridership statistics (average weekday BART station exits)."),
-      p("Data is available from January 2019 until September 2021"),
-      em("NB. The Golden Gate Bridge only has data until August 2021."),
-      p(""),
       
-      helpText("Choose a transit mode to plot their monthly statistics:"),
+      # Short Text!
+      strong("Understanding the impact of COVID-19 on travel in the SF Bay Area"),
+      p(),
+      p("Here you can investigate the monthly one-way toll crossing statistics for various transport routes in the SF Bay Area between January 2019 and September 2021 to understand the impact COVID-19 and the resulting Shelter-In-Place had on travel volumes."),
+      
+      # Help Text
+      helpText("Choose a transportation mode to plot their monthly statistics:"),
       
       # Input selector for the variables to display
       selectInput("var", 
                   label = "",
                   choices = transport_types,
                   selected = "bay_bridge"),
+      # Extra Text
+      p("You can also filter the data to a specific data range of interest"),
       
-      p("You can also filter the data to a specific data range of interest"), 
-      
-      # Date Range Input
-      #sliderInput("date_range", label = "Date Range Of Interest:", min = min(transport_data$date) , max = max(transport_data$date), c(min(transport_data$date), max(transport_data$date))),
-      
-      # Select minimum date
-      #tags$div(selectInput("min_date", label = "From:", choices = transport_data$date, selected = min(transport_data$date)), style="display:inline-block"),
-      
-      # Select maximum date
-      #tags$div(selectInput("max_date", label = "To:", choices = transport_data$date, selected = max(transport_data$date)), style="display:inline-block"),
-      
+      # Add to and from selectors
       fluidRow(
         column(6, selectInput("min_date", label = "From:", choices = transport_data$date, selected = min(transport_data$date))),
         column(6, selectInput("max_date", label = "To:", choices = transport_data$date, selected = max(transport_data$date))),
       ),
+      # Additional text
+      em("NB. The Golden Gate Bridge only has data until August 2021."),
+      p(""),
+      strong("Data Sources:"),
+      p(),
+      p("1. Transport data: Metropolitan Transportation Commission and Golden Gate Bridge Highway & Transportation District."),
+      p("2. Map data: UC Berkely GeoData Library, Openstreetmap.")
+      
     ),
-
+    
+    # Set up main panel
     mainPanel(
-      #plotOutput("graph", click = "plot_click"),
-      #plotOutput("graph", hover = "plot_hover"),
+     
+      # Put map on top
+      leafletOutput("transportmap"),
+      
+      # Add white space
+      p(),
+      
+      # Div used to create tooltips
       div(
         style = "position:relative",
         plotOutput("graph", 
@@ -93,108 +127,84 @@ ui <- fluidPage(
         uiOutput("hover_info")
       ),
       
-      #fluidRow(
-       # column(4, p("Number of users:")), 
-        #column(4, textOutput("info"))),
-      p("You can adjust the Y axis to investigate the data further."), 
-      actionButton("StandardY", label = "Standardized Y Axis"),
-      actionButton("AdjustedY", label = "Adjusted Y Axis"),
-        )
-      )
-)
-  
-    
+      # White space
+      p(),
+      # Text
+      p("You can also adjust the Y axis to study the finer trends in each dataset.", align = 'center' ), 
+      # Y axis buttons
+      fluidRow(column(12, align = 'center', actionButton("StandardY", label = "Standardized Y Axis"),
+                      actionButton("AdjustedY", label = "Adjusted Y Axis"))),
       
+    )
+  ),
+  
+)
 
+# Server function
 server <- function(input, output, session){
   
+  # Selecting variable for graph
   selected <- reactive(transport_data %>% select(date, input$var) %>% rename(n = input$var))
   
-  # Plot graph initially
-  output$graph <- renderPlot({
-    selected() %>% ggplot(aes(date, n)) +
-      geom_line(color = "#0099f9", size = 1) +
-      geom_point(color = "#0099f9", size = 3) +
-      labs(title = "Number of users",
-           subtitle = "Data from 2019 to 2021",
-           caption = "Data Sources: Metropolitan Transportation Commission and Golden Gate Bridge Highway & Transportation District",
-           y = "Number of Users",
-           x = "Month / Year")  +
-      #ylim(0, 9000000) +
-      scale_y_continuous(
-        labels = scales::unit_format(unit = "Million", scale = 1e-6), limits = c(0, 9000000)) +
-      scale_x_date(date_labels = "%b %Y", date_breaks = "2 month", limit=c(as.Date(input$min_date),as.Date(input$max_date))) +
-      theme(
-        plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
-        plot.caption = element_text(face = "italic", hjust = 0),
-        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "grey",),
-        axis.text.x=element_text(angle=60, hjust=1)
-      )
+  # Filtering spatial data to only rows with relevant geometry
+  spatial_data <- reactive(transport_spd %>% filter(name==input$var))
+  
+   # Map Creation
+  output$transportmap <- renderLeaflet({
+    
+    # Run leaflet
+    leaflet() %>%
+      # Set up stamen map
+      addProviderTiles(providers$Stamen.TonerLite,
+                       options = providerTileOptions(noWrap = TRUE)) %>% 
+      # Set view to SF Bay Area
+      setView(lng = -122.4, lat = 37.8, zoom = 9) %>%
+      # Add correct spatial data
+      addPolylines(data = spatial_data())
+   
+  })
+  
+  
+  
+  # Graph creation - set up graph theme / aesthetic to use in reactive events
+  graph_plot <- reactive(selected() %>% ggplot(aes(date, n)) +
+                           geom_line(color = "#0099f9", size = 1) +
+                           geom_point(color = "#0099f9", size = 3) +
+                           labs(title = "Number of users",
+                                subtitle = "Monthly Data",
+                                #caption = "Data Sources: Metropolitan Transportation Commission and Golden Gate Bridge Highway & Transportation District",
+                                y = "Number of Users",
+                                x = "Month / Year")  +
+                           theme(
+                             plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
+                             plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
+                             plot.caption = element_text(face = "italic", hjust = 0),
+                             panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                             panel.background = element_blank(), axis.line = element_line(colour = "grey",),
+                             axis.text.x=element_text(angle=60, hjust=1)) +
+                             scale_x_date(date_labels = "%b %Y", date_breaks = "2 month", limit=c(as.Date(input$min_date),as.Date(input$max_date)))
+                           )
+  
+  #Plot graph initially
+  output$graph <- renderPlot({graph_plot() +
+      scale_y_continuous(labels = scales::unit_format(unit = "Million", scale = 1e-6), limits = c(0, 9000000))
   }, res = 96)
   
+  # React to button press
   observeEvent(input$StandardY, {
-    output$graph <- renderPlot({
-      selected() %>% ggplot(aes(date, n)) +
-        geom_line(color = "#0099f9", size = 1) + 
-        geom_point(color = "#0099f9", size = 3) +
-        labs(title = "Number of users",
-             subtitle = "Data from 2019 to 2021",
-             caption = "Data Sources: Metropolitan Transportation Commission and Golden Gate Bridge Highway & Transportation District",
-             y = "Number of Users",
-             x = "Month / Year")  +
-        #ylim(0, 9000000) +
-        scale_y_continuous(
-          labels = scales::unit_format(unit = "Million", scale = 1e-6), limits = c(0, 9000000)) +
-        scale_x_date(date_labels = "%b %Y", date_breaks = "2 month", limit=c(as.Date(input$min_date),as.Date(input$max_date))) +
-        theme(
-          plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
-          plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
-          plot.caption = element_text(face = "italic", hjust = 0),
-          panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-          panel.background = element_blank(), axis.line = element_line(colour = "grey",),
-          axis.text.x=element_text(angle=60, hjust=1)
-        ) 
-    }, res = 96)
-  })
+    output$graph <- renderPlot({graph_plot() +
+        scale_y_continuous(labels = scales::unit_format(unit = "Million", scale = 1e-6), limits = c(0, 9000000))
+      }, res = 96)
+    })
   
+  # React to button press
   observeEvent(input$AdjustedY, {
-    output$graph <- renderPlot({
-      selected() %>% ggplot(aes(date, n)) +
-        geom_line(color = "#0099f9", size = 1) + 
-        geom_point(color = "#0099f9", size = 3) +
-        labs(title = "Number of users",
-             subtitle = "Data from 2019 to 2021",
-             caption = "Data Sources: Metropolitan Transportation Commission and Golden Gate Bridge Highway & Transportation District",
-             y = "Number of Users",
-             x = "Month / Year")  +
-        #ylim(0, 9000000) +
-        scale_y_continuous(
-          labels = scales::unit_format(unit = "Million", scale = 1e-6)) +
-        scale_x_date(date_labels = "%b %Y", date_breaks = "2 month", limit=c(as.Date(input$min_date),as.Date(input$max_date))) +
-        theme(
-          plot.title = element_text(color = "#0099f9", size = 20, face = "bold", hjust = 0.5),
-          plot.subtitle = element_text(size = 13, face = "bold", hjust = 0.5),
-          plot.caption = element_text(face = "italic", hjust = 0),
-          panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-          panel.background = element_blank(), axis.line = element_line(colour = "grey",),
-          axis.text.x=element_text(angle=60, hjust=1)
-        ) 
-    }, res = 96)
-  })
-    
-    # Experimenting with printing out the user numbers - want to supersede this with tooltip!
-    # output$info <- renderText({
-    #   paste0(round(input$plot_click$y))
+    output$graph <- renderPlot({graph_plot() +
+        scale_y_continuous(labels = scales::unit_format(unit = "Million", scale = 1e-6))
+      }, res = 96)
+    })
   
-    # output$info <- renderPrint({
-    #   nearPoints(selected(), input$plot_hover)
-      
-    #output$info <- renderText({
-    #  paste0((nearPoints(selected(), input$plot_click))[2])  
-    #  })
-  
+  # Create tooltips
   output$hover_info <- renderUI({
     hover <- input$plot_hover
     point <- nearPoints(selected(), hover, threshold = 5, maxpoints = 1, addDist = TRUE)
@@ -224,6 +234,7 @@ server <- function(input, output, session){
   })
 }
 
+# Add theme for font
 thematic_shiny(font = "auto")
 
 shinyApp(ui, server)
